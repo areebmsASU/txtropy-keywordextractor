@@ -93,5 +93,4 @@ class Command(BaseCommand):
                     lemma_syncer.add(lemma=token.lemma_.lower(), word=token.lower_)
                     tokens.append(token.lemma_.lower())
             chunk.token_counts = dict(Counter(tokens))
-            print(chunk.token_counts)
             chunk.save(update_fields=["token_counts"])

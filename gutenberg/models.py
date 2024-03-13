@@ -1,19 +1,19 @@
 from django.db import models
 
 
+class Book(models.Model):
+    gutenberg_id = models.IntegerField(unique=True)
+    text_lemma_counts = models.JSONField(null=True)
+
+
 class Chunk(models.Model):
     book_builder_id = models.IntegerField(unique=True)
-    book_gutenberg_id = models.IntegerField()
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="chunks")
     text = models.TextField()
     token_counts = models.JSONField(null=True)
     lemma_counts = models.JSONField(null=True)
     vocab_counts = models.JSONField(null=True)
     rel_i = models.IntegerField()
-
-
-class Book(models.Model):
-    gutenberg_id = models.IntegerField(unique=True)
-    text_lemma_counts = models.JSONField(null=True)
 
 
 class Lemma(models.Model):
