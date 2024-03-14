@@ -47,9 +47,9 @@ class ChunkLemmatizer:
                 map(
                     lambda counts: Counter(**counts),
                     list(
-                        Chunk.objects.filter(
-                            book_gutenberg_id=gutenberg_id, lemma_counts__isnull=False
-                        ).values_list("lemma_counts", flat=True)
+                        book.chunks.filter(lemma_counts__isnull=False).values_list(
+                            "lemma_counts", flat=True
+                        )
                     ),
                 ),
                 Counter(),
@@ -117,9 +117,9 @@ class ChunkLemmatizer:
 
         if get_vocab:
             print(f"Determining Vocabulary")
-            for gutenberg_id in set(
-                self.chunk_qs.values_list("book_gutenberg_id", flat=True).distinct()
-            ):
+            for gutenberg_id in Book.objects.values_list(
+                "gutenberg_id", flat=True
+            ).distinct():
                 self.executor_futures.append(
                     self.executor.submit(self.count_book_lemma, gutenberg_id)
                 )

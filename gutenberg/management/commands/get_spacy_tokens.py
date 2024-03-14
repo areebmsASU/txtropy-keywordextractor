@@ -85,12 +85,30 @@ class Command(BaseCommand):
         nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 
         lemma_syncer = LemmaSyncer()
+        qs = Chunk.objects.filter(token_counts__isnull=True)
 
-        for chunk in Chunk.objects.filter(token_counts__isnull=True).order_by("id"):
+        total = qs.count()
+
+        print(f"Counting tokens for {total} chunks.")
+
+        chunks = []
+        chunk_counts = 0
+
+        for chunk in qs.order_by("id"):
             tokens = []
             for token in nlp(unidecode(chunk.text)):
                 if token.is_alpha and not token.is_stop:
                     lemma_syncer.add(lemma=token.lemma_.lower(), word=token.lower_)
                     tokens.append(token.lemma_.lower())
             chunk.token_counts = dict(Counter(tokens))
-            chunk.save(update_fields=["token_counts"])
+            chunks.append(chunk)
+
+            if len(chunks) >= 10:
+                Chunk.objects.bulk_update(chunks, ["token_counts"])
+                chunk_counts += int(len(chunks))
+                chunks = []
+                print(f"Tokens counted for {chunk_counts} chunks.")
+
+        Chunk.objects.bulk_update(chunks, ["token_counts"], batch_size=250)
+        chunk_counts += len(chunks)
+        print(f"Tokens counted for {chunk_counts} of {total} chunks.")
