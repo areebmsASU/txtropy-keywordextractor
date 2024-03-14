@@ -41,8 +41,9 @@ cd ~
 source vars.sh
 source .venv/bin/activate
 cd keywordextractor
+python manage.py load_chunks >> $HOME/log.txt
+python manage.py tokenize >> $HOME/log.txt
 python manage.py count_chunk_vocab >> $HOME/log.txt
-timeout 55m python manage.py load_chunks && python manage.py get_spacy_tokens >> $HOME/log.txt
 echo “Routine completed at $(date)” >> $HOME/log.txt
 EOF
 chmod +x /etc/cron.hourly/run_routine.sh

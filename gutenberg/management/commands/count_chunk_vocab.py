@@ -10,7 +10,7 @@ from gutenberg.models import Book, Chunk, Word
 
 class ChunkLemmatizer:
     def __init__(self, chunk_qs, batch_size=100) -> None:
-        self.executor = ThreadPoolExecutor(max_workers=1)
+        self.executor = ThreadPoolExecutor()
         self.executor_futures = []
         self.chunk_qs = chunk_qs
         self.batch_size = batch_size
@@ -78,7 +78,7 @@ class ChunkLemmatizer:
     def print_execution_status(self):
         done, not_done = wait(self.executor_futures, return_when="FIRST_COMPLETED")
         while len(not_done):
-            sleep(3)
+            sleep(5)
             done, not_done = wait(self.executor_futures, return_when="FIRST_COMPLETED")
             print(
                 f"{len(not_done)} of {(len(done) + len(not_done))} tasks ({int((100 * len(not_done)) / (len(done) + len(not_done)))}%) remaining."
