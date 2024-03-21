@@ -141,10 +141,6 @@ class Command(BaseCommand):
     help = "Closes the specified poll for voting"
 
     def handle(self, *args, **options):
-        chunk_qs = (
-            Chunk.objects.filter(token_counts__isnull=False)
-            .filter(vocab_counts__isnull=True)
-            .order_by("id")
-        )
+        chunk_qs = Chunk.objects.filter(token_counts__isnull=False).order_by("id")
         lemmatizer = ChunkLemmatizer(chunk_qs=chunk_qs)
         lemmatizer.start()

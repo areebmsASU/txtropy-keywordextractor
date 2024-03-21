@@ -1,6 +1,5 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
-from time import sleep
 
 import spacy
 from unidecode import unidecode
@@ -123,7 +122,7 @@ class Command(BaseCommand):
         lemma_syncer = LemmaSyncer()
 
         for book in Book.objects.all():
-            qs = book.chunks.filter(token_counts__isnull=True)
+            qs = book.chunks.all()
             total = qs.count()
 
             if total:

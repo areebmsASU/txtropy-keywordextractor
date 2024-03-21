@@ -11,7 +11,6 @@ sudo chown -R ubuntu .venv/
 touch vars.sh
 chmod +x vars.sh
 
-
 # Create git dir
 mkdir keywordextractor.git
 mkdir keywordextractor
@@ -34,8 +33,9 @@ deactivate
 EOF
 chmod +x /home/ubuntu/keywordextractor.git/hooks/post-receive
 
-touch /etc/cron.hourly/run_routine.sh
-cat > /etc/cron.hourly/run_routine.sh <<- "EOF"
+touch /etc/cron.hourly/run_routine
+cat > /etc/cron.hourly/run_routine <<- "EOF"
+#!/bin/bash
 echo “Routine started at $(date)” >> $HOME/log.txt
 cd ~
 source vars.sh
@@ -43,7 +43,7 @@ source .venv/bin/activate
 cd keywordextractor
 python manage.py load_chunks >> $HOME/log.txt
 python manage.py tokenize >> $HOME/log.txt
-python manage.py count_chunk_vocab >> $HOME/log.txt
+python manage.py count_vocab >> $HOME/log.txt
 echo “Routine completed at $(date)” >> $HOME/log.txt
 EOF
-chmod +x /etc/cron.hourly/run_routine.sh
+chmod +x /etc/cron.hourly/run_routine

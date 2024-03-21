@@ -14,6 +14,7 @@ class Chunk(models.Model):
     lemma_counts = models.JSONField(null=True)
     vocab_counts = models.JSONField(null=True)
     rel_i = models.IntegerField()
+    last_modified = models.DateTimeField(auto_now=True)
 
 
 class Lemma(models.Model):
