@@ -1,6 +1,7 @@
 from celery import shared_task
+from django.db.models import Count
 
-from gutenberg.models import Book
+from gutenberg.models import Book, Lemma
 from django.http import JsonResponse
 
 
@@ -41,3 +42,19 @@ def create_chunk(request):
         except Exception as e:
             return JsonResponse({"error": e.args[0]}, status_code=400)
     return JsonResponse({"created": created})
+
+
+def lemma(request):
+    return JsonResponse(
+        list(
+            Lemma.objects.annotate(count=Count("words"))
+            .values("text", "count")
+            .order_by("-count")
+        ),
+        safe=False,
+    )
+
+
+def words(request, lemma):
+    lemma = Lemma.objects.get(text=lemma)
+    return JsonResponse(list(lemma.words.values("text")), safe=False)
