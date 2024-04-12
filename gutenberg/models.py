@@ -3,6 +3,10 @@ from django.db import models
 
 class Book(models.Model):
     gutenberg_id = models.IntegerField(unique=True)
+    subject_gutenberg_id = models.IntegerField()
+    title = models.TextField()
+    author = models.TextField()
+
     text_lemma_counts = models.JSONField(null=True)
 
 
@@ -10,10 +14,11 @@ class Chunk(models.Model):
     book_builder_id = models.IntegerField(unique=True)
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="chunks")
     text = models.TextField()
+
     token_counts = models.JSONField(null=True)
     lemma_counts = models.JSONField(null=True)
     vocab_counts = models.JSONField(null=True)
-    rel_i = models.IntegerField()
+
     last_modified = models.DateTimeField(auto_now=True)
 
 

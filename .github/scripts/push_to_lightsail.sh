@@ -10,5 +10,5 @@ eval `ssh-agent -s`
 ssh-keyscan -t rsa -H 3.99.1.152 >> ~/.ssh/known_hosts
 ssh-add secrets/git.pem
 
-git remote add lightsail ubuntu@3.99.1.152:~/keywordextractor.git
+git remote add lightsail bitnami@3.99.1.152:~/keywordextractor.git
 git push lightsail --force
