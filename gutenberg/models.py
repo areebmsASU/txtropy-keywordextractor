@@ -3,7 +3,6 @@ from django.db import models
 
 class Book(models.Model):
     gutenberg_id = models.IntegerField(unique=True)
-    subject_gutenberg_id = models.IntegerField()
     title = models.TextField()
     author = models.TextField()
 
