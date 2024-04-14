@@ -9,7 +9,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-INSTALLED_APPS = ["gutenberg.apps.GutenbergConfig"]
+INSTALLED_APPS = ["corsheaders", "gutenberg.apps.GutenbergConfig"]
 
 ROOT_URLCONF = "keywordextractor.urls"
 
@@ -24,6 +24,12 @@ DATABASES = {
     }
 }
 
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 LANGUAGE_CODE = "en-us"
 
