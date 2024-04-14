@@ -2,19 +2,18 @@
 sudo apt-get update
 sudo apt install -y postgresql
 sudo apt install -y redis
-python -m venv /home/bitnami/.venv
+/opt/bitnami/python/bin/python3.11 -m venv /home/bitnami/.venv
 
 # Placeholder for vars.
-touch vars.py
+touch /home/bitnami/vars.py
 
 # Create git dir
-mkdir keywordextractor.git
-mkdir keywordextractor
-sudo chown -R bitnami keywordextractor.git/
-sudo chown -R bitnami keywordextractor/
-cd keywordextractor.git
+mkdir /home/bitnami/keywordextractor.git
+mkdir /home/bitnami/keywordextractor
+cd /home/bitnami/keywordextractor.git
 git config --global init.defaultBranch main
 git init --bare
+cd /home/bitnami
 
 # Create post receive
 touch /home/bitnami/keywordextractor.git/hooks/post-receive
@@ -73,4 +72,52 @@ EOF
 sudo chown -R bitnami /home/bitnami/.venv
 sudo chown -R bitnami /home/bitnami/keywordextractor
 sudo chown -R bitnami /home/bitnami/keywordextractor.git
-# celery -A keywordextractor worker -l INFO
+
+touch /etc/systemd/system/celeryd.service
+cat > /etc/systemd/system/celeryd.service <<- "EOF"
+[Unit]
+Description=Celery Service
+After=network.target
+
+[Service]
+Type=forking
+User=bitnami
+Group=bitnami
+EnvironmentFile=/etc/default/celeryd
+WorkingDirectory=/home/bitnami/keywordextractor
+ExecStart=/bin/sh -c '${CELERY_BIN} multi start ${CELERYD_NODES} -A ${CELERY_APP} --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} --loglevel=${CELERYD_LOG_LEVEL} ${CELERYD_OPTS}'
+ExecStop=/bin/sh -c '${CELERY_BIN} multi stopwait ${CELERYD_NODES} --pidfile=${CELERYD_PID_FILE}'
+ExecReload=/bin/sh -c '${CELERY_BIN} multi restart ${CELERYD_NODES} -A ${CELERY_APP} --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} --loglevel=${CELERYD_LOG_LEVEL} ${CELERYD_OPTS}'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+touch /etc/default/celeryd
+cat > /etc/default/celeryd <<- "EOF"
+# The names of the workers. This example create one worker
+CELERYD_NODES="worker1"
+
+# The name of the Celery App, should be the same as the python file
+# where the Celery tasks are defined
+CELERY_APP="keywordextractor"
+
+# Log and PID directories
+CELERYD_LOG_FILE="/var/log/celery/%n%I.log"
+CELERYD_PID_FILE="/var/run/celery/%n.pid"
+
+# Log level
+CELERYD_LOG_LEVEL=INFO
+
+# Path to celery binary, that is in your virtual environment
+CELERY_BIN=/home/bitnami/.venv/bin/celery
+EOF
+
+sudo mkdir /var/log/celery /var/run/celery
+sudo chown bitnami:bitnami /var/log/celery /var/run/celery
+
+sudo systemctl daemon-reload
+sudo systemctl enable celeryd
+sudo systemctl start celeryd
+

@@ -15,7 +15,7 @@ def main(request):
     return JsonResponse({})
 
 
-def create_book(request):
+def books(request):
     if request.method == "POST":
         try:
             book = Book.objects.filter(gutenberg_id=request.POST["id"]).first()
@@ -38,6 +38,23 @@ def create_book(request):
 
             return JsonResponse({"error": repr(e)}, status=400)
         return JsonResponse({"status": status})
+    elif request.method == "GET":
+        counts = {}
+        for gutenberg_id, chunk_count in Book.objects.annotate(
+            chunk_count=Count("chunks")
+        ).values_list("gutenberg_id", "chunk_count"):
+            counts[gutenberg_id] = chunk_count
+        return JsonResponse(counts)
+    elif request.method == "DELETE":
+        try:
+            book = Book.objects.filter(gutenberg_id=request.POST["book_id"]).first()
+            if book is None:
+                return JsonResponse({"error": "Book not found."}, status=404)
+
+            res = book.chunks.all().delete()
+        except Exception as e:
+            return JsonResponse({"error": repr(e)}, status=400)
+        return JsonResponse({"created": res})
 
 
 def create_chunk(request):
@@ -47,12 +64,12 @@ def create_chunk(request):
             if book is None:
                 return JsonResponse({"error": "Book not found."}, status=404)
 
-            created = book.chunks.get_or_create(
+            delete = book.chunks.get_or_create(
                 book_builder_id=request.POST["id"], text=request.POST["text"]
             )[1]
         except Exception as e:
             return JsonResponse({"error": repr(e)}, status=400)
-    return JsonResponse({"created": created})
+    return JsonResponse({"delete": delete})
 
 
 def lemma(request):
