@@ -1,18 +1,35 @@
+import requests
 from celery import shared_task
-from django.db.models import Count
 
-from gutenberg.models import Book, Lemma
+from django.db.models import Count
 from django.http import JsonResponse
+
+from gutenberg.models import Book, Lemma, Chunk
+
+
+BOOKBUILDER_URL = "http://api.bookbuilder.txtropy.com"
 
 
 @shared_task
-def test():
-    print("Tested.")
+def load_chunks(gutenberg_id):
 
+    book = Book.objects.get(gutenberg_id=gutenberg_id)
 
-def main(request):
-    test.delay()
-    return JsonResponse({})
+    data = requests.get(f"{BOOKBUILDER_URL}/chunks/{gutenberg_id}/").json()
+
+    created_ids = []
+    while data["chunks"]:
+        chunks = []
+        for chunk in data["chunks"]:
+            chunks.append(Chunk(book_builder_id=chunk["id"], text=chunk["text"], book_id=book.id))
+            created_ids.append(chunk["id"])
+        Chunk.objects.bulk_create(chunks)
+        if "next_page" in data:
+            data = requests.get(data["next_page"]).json()
+        else:
+            break
+
+    book.chunks.exclude(book_builder_id__in=created_ids).delete()
 
 
 def books(request):
@@ -37,6 +54,7 @@ def books(request):
         except Exception as e:
 
             return JsonResponse({"error": repr(e)}, status=400)
+        load_chunks.delay(gutenberg_id=book.gutenberg_id)
         return JsonResponse({"status": status})
     elif request.method == "GET":
         counts = {}
@@ -64,12 +82,12 @@ def create_chunk(request):
             if book is None:
                 return JsonResponse({"error": "Book not found."}, status=404)
 
-            delete = book.chunks.get_or_create(
+            created = book.chunks.get_or_create(
                 book_builder_id=request.POST["id"], text=request.POST["text"]
             )[1]
         except Exception as e:
             return JsonResponse({"error": repr(e)}, status=400)
-    return JsonResponse({"delete": delete})
+    return JsonResponse({"created": created})
 
 
 def lemma(request):
