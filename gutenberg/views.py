@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 
 import requests
@@ -82,7 +83,8 @@ def books(request):
 
 def count_tokens(request):
     if request.method == "POST":
-        task_id = get_token_count(gutenberg_id=request.POST["book_id"])
+        body_data = json.loads(request.body.decode("utf-8"))
+        task_id = get_token_count(gutenberg_id=body_data["book_id"])
         return JsonResponse({"task": task_id})
 
 
