@@ -1,10 +1,12 @@
+from collections import defaultdict
+
 import requests
 from celery import shared_task
-
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 
 from gutenberg.models import Book, Lemma, Chunk
+from gutenberg.tokenize import get_token_count
 
 
 BOOKBUILDER_URL = "http://api.bookbuilder.txtropy.com"
@@ -57,11 +59,14 @@ def books(request):
         load_chunks.delay(gutenberg_id=book.gutenberg_id)
         return JsonResponse({"status": status})
     elif request.method == "GET":
-        counts = {}
-        for gutenberg_id, chunk_count in Book.objects.annotate(
-            chunk_count=Count("chunks")
-        ).values_list("gutenberg_id", "chunk_count"):
-            counts[gutenberg_id] = chunk_count
+        counts = defaultdict(dict)
+        for gutenberg_id, chunk_count, token_count in (
+            Book.objects.annotate(chunk_count=Count("chunks"))
+            .annotate(token_count=Count("chunks", filter=~Q(chunks__token_counts=None)))
+            .values_list("gutenberg_id", "chunk_count", "token_count")
+        ):
+            counts[gutenberg_id]["total"] = chunk_count
+            counts[gutenberg_id]["tokens"] = token_count
         return JsonResponse(counts)
     elif request.method == "DELETE":
         try:
@@ -73,6 +78,12 @@ def books(request):
         except Exception as e:
             return JsonResponse({"error": repr(e)}, status=400)
         return JsonResponse({"created": res})
+
+
+def count_tokens(request):
+    if request.method == "POST":
+        task_id = get_token_count(gutenberg_id=request.POST["book_id"])
+        return JsonResponse({"task": task_id})
 
 
 def create_chunk(request):
