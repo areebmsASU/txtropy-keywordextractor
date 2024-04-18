@@ -1,16 +1,17 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
+from nltk.stem.snowball import SnowballStemmer
 
 import spacy
+from celery import shared_task
 from unidecode import unidecode
-from django.core.management.base import BaseCommand
 from django.db import transaction
+
 
 from gutenberg.models import Chunk, Lemma, Word, Book
 
 
 class LemmaSyncer:
-
     def __init__(self) -> None:
         self.executor = ThreadPoolExecutor()
         self.executor_futures = []
@@ -87,8 +88,7 @@ class LemmaSyncer:
 
     def refresh_lemma_by_word(self):
         self.lemma_by_word = {
-            word: lemma
-            for word, lemma in Word.objects.values_list("text", "lemma__text")
+            word: lemma for word, lemma in Word.objects.values_list("text", "lemma__text")
         }
 
     def _add(self, lemma, word):
@@ -112,45 +112,51 @@ class LemmaSyncer:
             self.refresh_lemma_by_word()
 
 
-class Command(BaseCommand):
-    help = "Closes the specified poll for voting"
+@shared_task
+def async_count_tokens(gutenberg_id):
+    book = Book.objects.get(gutenberg_id=gutenberg_id)
+    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+    lemma_syncer = LemmaSyncer()
 
-    def handle(self, *args, **options):
+    chunks = []
+    for chunk in book.chunks.order_by("id"):
 
-        nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        tokens = []
+        for token in nlp(unidecode(chunk.text)):
+            if token.is_alpha and not token.is_stop:
+                # learn lemma for each token
+                lemma_syncer.add(lemma=token.lemma_.lower(), word=token.lower_)
+                tokens.append(token.lemma_.lower())
+        chunk.token_counts = dict(Counter(tokens))  # save token
+        chunks.append(chunk)
 
-        lemma_syncer = LemmaSyncer()
+    Chunk.objects.bulk_update(chunks, ["token_counts"], batch_size=250)
 
-        for book in Book.objects.all():
-            qs = book.chunks.all()
-            total = qs.count()
+    lemma_syncer.print_execution_status()
 
-            if total:
-                print(f"{book.gutenberg_id} Counting tokens for {total} chunks.")
-                chunks = []
-                chunk_counts = 0
-                for chunk in qs.order_by("id"):
 
-                    tokens = []
-                    for token in nlp(unidecode(chunk.text)):
-                        if token.is_alpha and not token.is_stop:
-                            lemma_syncer.add(
-                                lemma=token.lemma_.lower(), word=token.lower_
-                            )
-                            tokens.append(token.lemma_.lower())
-                    chunk.token_counts = dict(Counter(tokens))
-                    chunks.append(chunk)
+@shared_task
+def async_count_lemmas(gutenberg_id):
+    book = Book.objects.get(gutenberg_id=gutenberg_id)
 
-                    if len(chunks) >= 1000:
-                        Chunk.objects.bulk_update(
-                            chunks, ["token_counts"], batch_size=250
-                        )
-                        chunk_counts += int(len(chunks))
-                        chunks = []
-                        print(f"Tokens counted for {chunk_counts} chunks.")
+    lemmas = {word: _lemma for word, _lemma in Word.objects.values_list("text", "lemma__text")}
+    stemmer = SnowballStemmer(language="english")
 
-                Chunk.objects.bulk_update(chunks, ["token_counts"], batch_size=250)
-                chunk_counts += len(chunks)
-                print(f"Tokens counted for {chunk_counts} of {total} chunks.")
+    chunks = []
+    lemma_counts = []
+    for chunk in book.chunks.order_by("id").only("token_counts"):
+        chunk.lemma_counts = Counter()
+        for token, count in chunk.token_counts.items():
+            if token in lemmas:
+                stem = stemmer.stem(lemmas[token])
+                if len(stem) > 2:
+                    chunk.lemma_counts.update({stem: count})
 
-                lemma_syncer.print_execution_status()
+        if chunk.lemma_counts:
+            lemma_counts.append(Counter(chunk.lemma_counts))
+            chunk.lemma_counts = dict(chunk.lemma_counts)
+            chunks.append(chunk)
+
+    Chunk.objects.bulk_update(chunks, fields=["lemma_counts"], batch_size=250)
+    book.text_lemma_counts = dict(sum(lemma_counts, Counter()))
+    book.save(update_fields=["text_lemma_counts"])

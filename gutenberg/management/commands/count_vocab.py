@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import Counter
 from time import sleep
 
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -17,46 +17,6 @@ class ChunkLemmatizer:
         self.stemmer = SnowballStemmer(language="english")
         self.vocabulary = []
 
-    def lemmatize(self, chunk_ids):
-        lemmas = {
-            word: _lemma
-            for word, _lemma in Word.objects.values_list("text", "lemma__text")
-        }
-
-        chunks = []
-        for chunk in Chunk.objects.filter(id__in=chunk_ids).only("token_counts"):
-            chunk.lemma_counts = defaultdict(int)
-            for token, count in chunk.token_counts.items():
-                if token in lemmas:
-                    stem = self.stemmer.stem(lemmas[token])
-                    if len(stem) > 2:
-                        chunk.lemma_counts[stem] += count
-
-            chunk.lemma_counts = dict(chunk.lemma_counts)
-            if chunk.lemma_counts:
-                chunks.append(chunk)
-
-        Chunk.objects.bulk_update(
-            chunks, fields=["lemma_counts"], batch_size=self.batch_size
-        )
-
-    def count_book_lemma(self, gutenberg_id):
-        book = Book.objects.get(gutenberg_id=gutenberg_id)
-        book.text_lemma_counts = dict(
-            sum(
-                map(
-                    lambda counts: Counter(**counts),
-                    list(
-                        book.chunks.filter(lemma_counts__isnull=False).values_list(
-                            "lemma_counts", flat=True
-                        )
-                    ),
-                ),
-                Counter(),
-            )
-        )
-        book.save(update_fields=["text_lemma_counts"])
-
     def update_vocab(self, chunk_ids):
         if not self.vocabulary:
             self.load_vocabulary()
@@ -71,9 +31,7 @@ class ChunkLemmatizer:
 
             chunks.append(chunk)
 
-        Chunk.objects.bulk_update(
-            chunks, fields=["vocab_counts"], batch_size=self.batch_size
-        )
+        Chunk.objects.bulk_update(chunks, fields=["vocab_counts"], batch_size=self.batch_size)
 
     def print_execution_status(self):
         done, not_done = wait(self.executor_futures, return_when="FIRST_COMPLETED")
@@ -117,9 +75,7 @@ class ChunkLemmatizer:
 
         if get_vocab:
             print(f"Determining Vocabulary")
-            for gutenberg_id in Book.objects.values_list(
-                "gutenberg_id", flat=True
-            ).distinct():
+            for gutenberg_id in Book.objects.values_list("gutenberg_id", flat=True).distinct():
                 self.executor_futures.append(
                     self.executor.submit(self.count_book_lemma, gutenberg_id)
                 )

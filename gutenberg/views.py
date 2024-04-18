@@ -1,5 +1,5 @@
 import json
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import requests
 from celery import shared_task
@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 
 from gutenberg.models import Book, Lemma, Chunk
-from gutenberg.tokenize import get_token_count
+from gutenberg.pipeline_tasks import async_count_tokens, async_count_lemmas
 
 
 BOOKBUILDER_URL = "http://api.bookbuilder.txtropy.com"
@@ -61,14 +61,15 @@ def books(request):
         return JsonResponse({"status": status})
     elif request.method == "GET":
         counts = defaultdict(dict)
-        for gutenberg_id, chunk_count, token_count in (
+        for gutenberg_id, chunk_count, token_count, text_lemma_counts in (
             Book.objects.annotate(chunk_count=Count("chunks"))
             .annotate(token_count=Count("chunks", filter=~Q(chunks__token_counts=None)))
-            .values_list("gutenberg_id", "chunk_count", "token_count")
+            .values_list("gutenberg_id", "chunk_count", "token_count", "text_lemma_counts")
         ):
             counts[gutenberg_id]["total"] = chunk_count
             counts[gutenberg_id]["tokens"] = token_count
-        return JsonResponse(counts)
+            counts[gutenberg_id]["lemma_counts"] = bool(text_lemma_counts)
+        return JsonResponse(dict(counts))
     elif request.method == "DELETE":
         try:
             book = Book.objects.filter(gutenberg_id=request.POST["book_id"]).first()
@@ -84,7 +85,14 @@ def books(request):
 def count_tokens(request):
     if request.method == "POST":
         body_data = json.loads(request.body.decode("utf-8"))
-        task_id = get_token_count(gutenberg_id=body_data["book_id"])
+        task_id = async_count_tokens.delay(gutenberg_id=body_data["book_id"])
+        return JsonResponse({"task": task_id})
+
+
+def count_lemmas(request):
+    if request.method == "POST":
+        body_data = json.loads(request.body.decode("utf-8"))
+        task_id = async_count_lemmas.delay(gutenberg_id=body_data["book_id"])
         return JsonResponse({"task": task_id})
 
 
@@ -113,5 +121,4 @@ def lemma(request):
 
 
 def words(request, lemma):
-    lemma = Lemma.objects.get(text=lemma)
-    return JsonResponse(list(lemma.words.values("text")), safe=False)
+    return JsonResponse(list(Lemma.objects.get(text=lemma).words.values("text")), safe=False)
