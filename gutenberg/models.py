@@ -8,6 +8,14 @@ class Book(models.Model):
 
     text_lemma_counts = models.JSONField(null=True)
 
+    def status(self):
+        return self.chunks.aggregate(
+            chunk_count=models.Count("pk"),
+            chunk_has_token=models.Count("pk", filter=~models.Q(token_counts=None)),
+            chunk_has_lemma=models.Count("pk", filter=~models.Q(lemma_counts=None)),
+            chunk_has_vocab=models.Count("pk", filter=~models.Q(vocab_counts=None)),
+        )
+
 
 class Chunk(models.Model):
     book_builder_id = models.IntegerField(unique=True)
@@ -23,6 +31,7 @@ class Chunk(models.Model):
 
 class Lemma(models.Model):
     text = models.TextField(unique=True, db_index=True)
+    stem = models.TextField(null=True)
 
     def __str__(self) -> str:
         return self.text

@@ -1,5 +1,15 @@
 from django.urls import path
-from gutenberg.views import books, create_chunk, lemma, words, count_tokens, count_lemmas
+from gutenberg.views import (
+    books,
+    create_chunk,
+    lemma,
+    words,
+    count_tokens,
+    count_lemmas,
+    bulk_count_tokens,
+    bulk_count_lemmas,
+    status,
+)
 
 urlpatterns = [
     path("books/", books),
@@ -8,4 +18,7 @@ urlpatterns = [
     path("lemma/", lemma),
     path("count_tokens/", count_tokens),
     path("count_lemmas/", count_lemmas),
+    path("bulk_count_tokens/", bulk_count_tokens),
+    path("bulk_count_lemmas/", bulk_count_lemmas),
+    path("status/", status),
 ]

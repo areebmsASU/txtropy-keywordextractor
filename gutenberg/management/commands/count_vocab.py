@@ -100,3 +100,10 @@ class Command(BaseCommand):
         chunk_qs = Chunk.objects.filter(token_counts__isnull=False).order_by("id")
         lemmatizer = ChunkLemmatizer(chunk_qs=chunk_qs)
         lemmatizer.start()
+
+        # chunks = []
+        # print(Chunk.objects.exclude(vocab_counts__isnull=True).count())
+        # for chunk in Chunk.objects.exclude(vocab_counts__isnull=True):
+        #    chunk.vocab_counts = chunk.lemma_counts
+        #    chunks.append(chunk)
+        # Chunk.objects.bulk_update(chunks, ["vocab_counts"], 250)

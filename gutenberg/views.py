@@ -7,7 +7,12 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 
 from gutenberg.models import Book, Lemma, Chunk
-from gutenberg.pipeline_tasks import async_count_tokens, async_count_lemmas
+from gutenberg.pipeline_tasks import (
+    async_count_tokens,
+    async_count_lemmas,
+    async_bulk_count_lemmas,
+    async_bulk_count_tokens,
+)
 
 
 BOOKBUILDER_URL = "http://api.bookbuilder.txtropy.com"
@@ -33,6 +38,44 @@ def load_chunks(gutenberg_id):
             break
 
     book.chunks.exclude(book_builder_id__in=created_ids).delete()
+
+
+def status(request):
+    books = 0
+    tokenized = 0
+    lemmatized = 0
+    filtered = 0
+    details = []
+    for book in Book.objects.all():
+        books += 1
+        status = book.status()
+        chunk_count = status.pop("chunk_count")
+        tokenized += int(chunk_count == status["chunk_has_token"])
+        lemmatized += int(chunk_count == status["chunk_has_lemma"])
+        filtered += int(chunk_count == status["chunk_has_vocab"])
+
+        details.append(
+            {
+                "id": book.gutenberg_id,
+                "chunk_count": chunk_count,
+                **{
+                    k: round(v / chunk_count, 2) if chunk_count else "N/A"
+                    for k, v in status.items()
+                },
+            }
+        )
+
+    return JsonResponse(
+        {
+            "summary": {
+                "books": books,
+                "tokenized": tokenized,
+                "lemmatized": lemmatized,
+                "filtered": filtered,
+            },
+            "details": details,
+        }
+    )
 
 
 def books(request):
@@ -85,14 +128,26 @@ def books(request):
 def count_tokens(request):
     if request.method == "POST":
         body_data = json.loads(request.body.decode("utf-8"))
-        task_id = async_count_tokens.delay(gutenberg_id=body_data["book_id"])
+        task_id = async_count_tokens.delay(gutenberg_id=body_data["book_id"]).task_id
+        return JsonResponse({"task": task_id})
+
+
+def bulk_count_tokens(request):
+    if request.method == "POST":
+        task_id = async_bulk_count_tokens.delay().task_id
         return JsonResponse({"task": task_id})
 
 
 def count_lemmas(request):
     if request.method == "POST":
         body_data = json.loads(request.body.decode("utf-8"))
-        task_id = async_count_lemmas.delay(gutenberg_id=body_data["book_id"])
+        task_id = async_count_lemmas.delay(gutenberg_id=body_data["book_id"]).task_id
+        return JsonResponse({"task": task_id})
+
+
+def bulk_count_lemmas(request):
+    if request.method == "POST":
+        task_id = async_bulk_count_lemmas.delay().task_id
         return JsonResponse({"task": task_id})
 
 
@@ -111,14 +166,31 @@ def create_chunk(request):
     return JsonResponse({"created": created})
 
 
-def lemma(request):
-    return JsonResponse(
-        list(
-            Lemma.objects.annotate(count=Count("words")).values("text", "count").order_by("-count")
-        ),
-        safe=False,
-    )
-
-
 def words(request, lemma):
     return JsonResponse(list(Lemma.objects.get(text=lemma).words.values("text")), safe=False)
+
+
+def lemma(request):
+
+    words = Counter()
+    for lemma_text, word_count in Lemma.objects.annotate(count=Count("words")).values_list(
+        "stem", "count"
+    ):
+        words.update({lemma_text: word_count})
+    words = dict(words)
+
+    return JsonResponse(
+        [
+            {"lemma": lemma, "instances": instances, "words": words.get(lemma)}
+            for lemma, instances in sum(
+                [
+                    Counter(text_lemma_counts)
+                    for text_lemma_counts in Book.objects.values_list(
+                        "text_lemma_counts", flat=True
+                    )
+                ],
+                Counter(),
+            ).most_common()
+        ],
+        safe=False,
+    )
