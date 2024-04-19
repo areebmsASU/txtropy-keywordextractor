@@ -1,7 +1,7 @@
 from django.urls import path
 from gutenberg.views import (
     books,
-    create_chunk,
+    chunks,
     lemma,
     words,
     count_tokens,
@@ -13,7 +13,7 @@ from gutenberg.views import (
 
 urlpatterns = [
     path("books/", books),
-    path("chunk/", create_chunk),
+    path("chunks/<int:gutenberg_id>/", chunks),
     path("lemma/<slug:lemma>/", words),
     path("lemma/", lemma),
     path("count_tokens/", count_tokens),

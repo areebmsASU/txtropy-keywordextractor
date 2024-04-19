@@ -151,21 +151,6 @@ def bulk_count_lemmas(request):
         return JsonResponse({"task": task_id})
 
 
-def create_chunk(request):
-    if request.method == "POST":
-        try:
-            book = Book.objects.filter(gutenberg_id=request.POST["book_id"]).first()
-            if book is None:
-                return JsonResponse({"error": "Book not found."}, status=404)
-
-            created = book.chunks.get_or_create(
-                book_builder_id=request.POST["id"], text=request.POST["text"]
-            )[1]
-        except Exception as e:
-            return JsonResponse({"error": repr(e)}, status=400)
-    return JsonResponse({"created": created})
-
-
 def words(request, lemma):
     return JsonResponse(list(Lemma.objects.get(text=lemma).words.values("text")), safe=False)
 
@@ -194,3 +179,32 @@ def lemma(request):
         ],
         safe=False,
     )
+
+
+def chunks(request, gutenberg_id):
+    i = request.GET.get("i", 0)
+
+    book = Book.objects.filter(gutenberg_id=gutenberg_id).first()
+    if book is None:
+        return JsonResponse({"error": "Book not found."}, status=404)
+
+    data = {
+        "chunks": [
+            {
+                "id": chunk_data["book_builder_id"],
+                "text": chunk_data["text"],
+                "vocab_counts": chunk_data["vocab_counts"],
+                "last_modified": chunk_data["last_modified"],
+            }
+            for chunk_data in book.chunks.filter(book_builder_id__gte=i)
+            .order_by("book_builder_id")[:251]
+            .values("book_builder_id", "text", "vocab_counts", "last_modified")
+        ]
+    }
+
+    if len(data["chunks"]) > 250:
+        base_url = request.build_absolute_uri().split("?")[0]
+        next_chunk_id = data["chunks"].pop()["id"]
+        data["next_page"] = f"{base_url}?i={next_chunk_id}"
+
+    return JsonResponse(data)
