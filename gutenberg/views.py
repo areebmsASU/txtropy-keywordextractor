@@ -15,7 +15,7 @@ from gutenberg.pipeline_tasks import (
 )
 
 
-BOOKBUILDER_URL = "http://api.bookbuilder.txtropy.com"
+BOOKBUILDER_URL = "https://api.bookbuilder.txtropy.com"
 
 
 @shared_task
@@ -103,16 +103,21 @@ def books(request):
         load_chunks.delay(gutenberg_id=book.gutenberg_id)
         return JsonResponse({"status": status})
     elif request.method == "GET":
-        counts = defaultdict(dict)
-        for gutenberg_id, chunk_count, token_count, text_lemma_counts in (
-            Book.objects.annotate(chunk_count=Count("chunks"))
-            .annotate(token_count=Count("chunks", filter=~Q(chunks__token_counts=None)))
-            .values_list("gutenberg_id", "chunk_count", "token_count", "text_lemma_counts")
+        ids = []
+        chunks = {}
+        completed = {}
+        for book in Book.objects.annotate(chunk_count=Count("chunks")).annotate(
+            token_count=Count("chunks", filter=~Q(chunks__token_counts=None))
         ):
-            counts[gutenberg_id]["total"] = chunk_count
-            counts[gutenberg_id]["tokens"] = token_count
-            counts[gutenberg_id]["lemma_counts"] = bool(text_lemma_counts)
-        return JsonResponse(dict(counts))
+            ids.append(book.gutenberg_id)
+            chunks[book.gutenberg_id] = book.chunk_count
+            completed[book.gutenberg_id] = (
+                bool(book.chunk_count)
+                and (book.chunk_count == book.token_count)
+                and book.text_lemma_counts
+                and book.last_modified.date()
+            )
+        return JsonResponse({"ids": ids, "chunks": chunks, "completed": completed})
     elif request.method == "DELETE":
         try:
             book = Book.objects.filter(gutenberg_id=request.POST["book_id"]).first()
@@ -193,12 +198,12 @@ def chunks(request, gutenberg_id):
             {
                 "id": chunk_data["book_builder_id"],
                 "text": chunk_data["text"],
-                "vocab_counts": chunk_data["vocab_counts"],
+                "vocab_counts": chunk_data["lemma_counts"],
                 "last_modified": chunk_data["last_modified"],
             }
             for chunk_data in book.chunks.filter(book_builder_id__gte=i)
             .order_by("book_builder_id")[:251]
-            .values("book_builder_id", "text", "vocab_counts", "last_modified")
+            .values("book_builder_id", "text", "lemma_counts", "last_modified")
         ]
     }
 

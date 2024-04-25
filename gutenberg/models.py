@@ -7,6 +7,7 @@ class Book(models.Model):
     author = models.TextField()
 
     text_lemma_counts = models.JSONField(null=True)
+    last_modified = models.DateTimeField(auto_now=True)
 
     def status(self):
         return self.chunks.aggregate(
@@ -31,7 +32,7 @@ class Chunk(models.Model):
 
 class Lemma(models.Model):
     text = models.TextField(unique=True, db_index=True)
-    stem = models.TextField(null=True)
+    stem = models.TextField()
 
     def __str__(self) -> str:
         return self.text

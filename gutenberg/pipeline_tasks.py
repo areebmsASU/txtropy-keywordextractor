@@ -1,14 +1,16 @@
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, wait
-from nltk.stem.snowball import SnowballStemmer
 
 import spacy
+import requests as r
 from celery import shared_task
-from unidecode import unidecode
+from concurrent.futures import ThreadPoolExecutor, wait
 from django.db import transaction
-
+from unidecode import unidecode
+from nltk.stem.snowball import SnowballStemmer
 
 from gutenberg.models import Chunk, Lemma, Word, Book
+
+RELENTROPYGETTER_URL = "https://api.relentropygetter.txtropy.com"
 
 
 class LemmaSyncer:
@@ -121,7 +123,6 @@ def async_count_tokens(gutenberg_id):
 
     chunks = []
     for chunk in book.chunks.order_by("id"):
-
         tokens = []
         for token in nlp(unidecode(chunk.text)):
             if token.is_alpha and not token.is_stop:
@@ -160,7 +161,6 @@ def async_bulk_count_tokens():
 
 @shared_task
 def async_bulk_count_lemmas():
-    # TODO: Room for optimization
     lemmas = {word: _lemma for word, _lemma in Word.objects.values_list("text", "lemma__text")}
     stemmer = SnowballStemmer(language="english")
 
@@ -192,6 +192,10 @@ def async_bulk_count_lemmas():
             Chunk.objects.bulk_update(chunks, fields=["lemma_counts"], batch_size=250)
             book.text_lemma_counts = dict(sum(lemma_counts, Counter()))
             book.save(update_fields=["text_lemma_counts"])
+            r.post(
+                RELENTROPYGETTER_URL + "/books/",
+                {"id": book.gutenberg_id, "title": book.title, "author": book.author},
+            )
 
 
 @shared_task
@@ -219,3 +223,7 @@ def async_count_lemmas(gutenberg_id):
     Chunk.objects.bulk_update(chunks, fields=["lemma_counts"], batch_size=250)
     book.text_lemma_counts = dict(sum(lemma_counts, Counter()))
     book.save(update_fields=["text_lemma_counts"])
+    r.post(
+        RELENTROPYGETTER_URL + "/books/",
+        {"id": book.gutenberg_id, "title": book.title, "author": book.author},
+    )
